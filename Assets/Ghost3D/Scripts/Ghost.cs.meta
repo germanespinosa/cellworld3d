@@ -1,0 +1,18 @@
+fileFormatVersion: 2
+guid: 95cfb98fd7e5f6f4f890901594dc1069
+MonoImporter:
+  externalObjects: {}
+  serializedVersion: 2
+  defaultReferences: []
+  executionOrder: 0
+  icon: {instanceID: 0}
+  userData: 
+  assetBundleName: 
+  assetBundleVariant: 
+AssetOrigin:
+  serializedVersion: 1
+  productId: 199498
+  packageName: Ghost low poly
+  packageVersion: 1.0
+  assetPath: Assets/Ghost3D/Scripts/Ghost.cs
+  uploadId: 451643
