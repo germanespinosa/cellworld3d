@@ -3,6 +3,9 @@ using UnityEngine.SceneManagement;
 using UnityEngine.UI;
 using TMPro;
 using System.Globalization;
+using System.Collections;
+using System;
+using System.IO;
 
 public class MenuController : MonoBehaviour
 {
@@ -11,9 +14,13 @@ public class MenuController : MonoBehaviour
     [SerializeField] private TMP_InputField protocolInput;
     [SerializeField] private TMP_Dropdown sampleRateDropDown;
     [SerializeField] private Toggle showCellworldGameToggle;
+    [SerializeField] private Image physiologySyncFlashTarget;
+    [SerializeField] private Vector2 physiologySyncFlashSize = new Vector2(140f, 140f);
+    [SerializeField] private Vector2 physiologySyncFlashOffset = new Vector2(24f, -24f);
 
     private CellworldGameBridge cellworldGameBridge;
     private CellworldBridgeState lastObservedBridgeState = CellworldBridgeState.Unknown;
+    private Coroutine physiologySyncCoroutine;
 
     // Start is called once before the first execution of Update after the MonoBehaviour is created
     void Start()
@@ -58,6 +65,19 @@ public class MenuController : MonoBehaviour
         cellworldGameBridge.SendInit(worldName, shouldRender, cellworldGameBridge.SampleInterval, protocolName, patientName);
     }
 
+    public void SynchronizePhysiologyEquipment()
+    {
+        if (physiologySyncCoroutine != null)
+            StopCoroutine(physiologySyncCoroutine);
+
+        physiologySyncCoroutine = StartCoroutine(PhysiologySyncSequence());
+    }
+
+    public void SyncPhysiology()
+    {
+        SynchronizePhysiologyEquipment();
+    }
+
     private bool TryResolveBridge()
     {
         if (cellworldGameBridge != null)
@@ -69,6 +89,7 @@ public class MenuController : MonoBehaviour
 
         return cellworldGameBridge != null;
     }
+
 
     private float ResolveSampleInterval()
     {
@@ -90,4 +111,115 @@ public class MenuController : MonoBehaviour
         if (idx == 2) return 1f / 90f;
         return 1f / 60f;
     }
+
+    private IEnumerator PhysiologySyncSequence()
+    {
+        Image flashTarget = ResolvePhysiologySyncFlashTarget();
+        if (flashTarget == null)
+        {
+            physiologySyncCoroutine = null;
+            yield break;
+        }
+
+        SetPhysiologySyncFlashVisible(flashTarget, false);
+        yield return new WaitForSeconds(3f);
+
+        DateTime firstFlashTimestamp = DateTime.MinValue;
+
+        yield return FlashPhysiologySyncPulses(flashTarget, 4, 0.020f, timestamp =>
+        {
+            if (firstFlashTimestamp == DateTime.MinValue)
+                firstFlashTimestamp = timestamp;
+        });
+        yield return new WaitForSeconds(1f);
+        yield return FlashPhysiologySyncPulses(flashTarget, 4, 0.050f);
+        yield return new WaitForSeconds(1f);
+        yield return FlashPhysiologySyncPulses(flashTarget, 4, 0.100f);
+
+        SetPhysiologySyncFlashVisible(flashTarget, false);
+        yield return new WaitForSeconds(3f);
+        SavePhysiologySyncTimestamp(firstFlashTimestamp);
+        flashTarget.gameObject.SetActive(false);
+        physiologySyncCoroutine = null;
+    }
+
+    private IEnumerator FlashPhysiologySyncPulses(Image flashTarget, int pulseCount, float pulseDuration, Action<DateTime> firstFlashCallback = null)
+    {
+        for (int i = 0; i < pulseCount; i++)
+        {
+            DateTime flashTimestamp = DateTime.Now;
+            SetPhysiologySyncFlashVisible(flashTarget, true);
+            firstFlashCallback?.Invoke(flashTimestamp);
+            yield return new WaitForSeconds(pulseDuration);
+            SetPhysiologySyncFlashVisible(flashTarget, false);
+            yield return new WaitForSeconds(pulseDuration);
+        }
+    }
+
+    private Image ResolvePhysiologySyncFlashTarget()
+    {
+        if (physiologySyncFlashTarget != null)
+            return physiologySyncFlashTarget;
+
+        Canvas canvas = GetComponentInParent<Canvas>();
+        if (canvas == null)
+            canvas = FindFirstObjectByType<Canvas>();
+
+        if (canvas == null)
+            return null;
+
+        GameObject flashObject = new GameObject("PhysiologySyncFlash", typeof(RectTransform), typeof(CanvasRenderer), typeof(Image));
+        flashObject.transform.SetParent(canvas.transform, false);
+
+        RectTransform rectTransform = flashObject.GetComponent<RectTransform>();
+        rectTransform.anchorMin = new Vector2(0f, 1f);
+        rectTransform.anchorMax = new Vector2(0f, 1f);
+        rectTransform.pivot = new Vector2(0f, 1f);
+        rectTransform.anchoredPosition = physiologySyncFlashOffset;
+        rectTransform.sizeDelta = physiologySyncFlashSize;
+
+        physiologySyncFlashTarget = flashObject.GetComponent<Image>();
+        physiologySyncFlashTarget.color = Color.black;
+        physiologySyncFlashTarget.raycastTarget = false;
+        physiologySyncFlashTarget.gameObject.SetActive(true);
+
+        return physiologySyncFlashTarget;
+    }
+
+    private void SetPhysiologySyncFlashVisible(Image flashTarget, bool visible)
+    {
+        flashTarget.gameObject.SetActive(true);
+        flashTarget.color = visible ? Color.white : Color.black;
+    }
+
+    private void SavePhysiologySyncTimestamp(DateTime firstFlashTimestamp)
+    {
+        if (firstFlashTimestamp == DateTime.MinValue)
+            return;
+
+        string saveDirectory = Environment.GetEnvironmentVariable("CELLWORLD_EXPERIMENT_DIR");
+        if (string.IsNullOrWhiteSpace(saveDirectory))
+            saveDirectory = Application.persistentDataPath;
+
+        Directory.CreateDirectory(saveDirectory);
+
+        string fileName = $"sync_signal_{firstFlashTimestamp:yyyyMMddHHmmss}.json";
+        string path = Path.Combine(saveDirectory, fileName);
+        string json = JsonUtility.ToJson(new PhysiologySyncSignal
+        {
+            first_flash_timestamp = firstFlashTimestamp.ToString("o", CultureInfo.InvariantCulture),
+            first_flash_unix_time_ms = new DateTimeOffset(firstFlashTimestamp).ToUnixTimeMilliseconds()
+        }, true);
+
+        File.WriteAllText(path, json);
+        Debug.Log($"[PHYSIOLOGY SYNC] Saved sync signal timestamp: {path}");
+    }
+
+    [Serializable]
+    private class PhysiologySyncSignal
+    {
+        public string first_flash_timestamp;
+        public long first_flash_unix_time_ms;
+    }
+
 }
