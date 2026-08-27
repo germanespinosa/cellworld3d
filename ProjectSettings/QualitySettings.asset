@@ -82,7 +82,8 @@ QualitySettings:
     billboardsFaceCameraPosition: 1
     useLegacyDetailDistribution: 1
     adaptiveVsync: 0
-    vSyncCount: 0
+    # Present on each vertical blank to prevent tearing and stabilize physiology sync marker onset.
+    vSyncCount: 1
     realtimeGICPUUsage: 100
     adaptiveVsyncExtraA: 0
     adaptiveVsyncExtraB: 0
