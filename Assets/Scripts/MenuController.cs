@@ -16,7 +16,8 @@ public class MenuController : MonoBehaviour
     [SerializeField] private Toggle showCellworldGameToggle;
     [SerializeField] private Image physiologySyncFlashTarget;
     [SerializeField] private Vector2 physiologySyncFlashSize = new Vector2(140f, 140f);
-    [SerializeField] private Vector2 physiologySyncFlashOffset = new Vector2(24f, -24f);
+    // Keep the sync marker 24 UI units inward from the Canvas's bottom-right corner.
+    [SerializeField] private Vector2 physiologySyncFlashOffset = new Vector2(-24f, 24f);
 
     private CellworldGameBridge cellworldGameBridge;
     private CellworldBridgeState lastObservedBridgeState = CellworldBridgeState.Unknown;
@@ -172,9 +173,10 @@ public class MenuController : MonoBehaviour
         flashObject.transform.SetParent(canvas.transform, false);
 
         RectTransform rectTransform = flashObject.GetComponent<RectTransform>();
-        rectTransform.anchorMin = new Vector2(0f, 1f);
-        rectTransform.anchorMax = new Vector2(0f, 1f);
-        rectTransform.pivot = new Vector2(0f, 1f);
+        // Bottom-right anchoring makes the negative X and positive Y offset point inward.
+        rectTransform.anchorMin = new Vector2(1f, 0f);
+        rectTransform.anchorMax = new Vector2(1f, 0f);
+        rectTransform.pivot = new Vector2(1f, 0f);
         rectTransform.anchoredPosition = physiologySyncFlashOffset;
         rectTransform.sizeDelta = physiologySyncFlashSize;
 
