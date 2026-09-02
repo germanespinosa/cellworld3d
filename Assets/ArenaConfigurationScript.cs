@@ -7,6 +7,8 @@ using System;
 
 public class ArenaConfigurationScript : MonoBehaviour
 {
+    private static Mesh occlusionCollisionMesh;
+
     public GameObject arena_prefab;
     public GameObject occlusion_prefab;
     public bool logDetails = true;
@@ -188,6 +190,7 @@ public class ArenaConfigurationScript : MonoBehaviour
                 occlusionScale.z *= data.cell_transformation.size * arenaScale;
                 occlusionScale.y = occlusionHeight;
                 occlusion.transform.localScale = occlusionScale;
+                EnsureSolidOcclusionCollider(occlusion);
                 spawnedOcclusionCount++;
 
                 if (logDetails)
@@ -197,6 +200,74 @@ public class ArenaConfigurationScript : MonoBehaviour
         }
 
         LogDetail($"Spawn complete. Spawned {spawnedOcclusionCount} occlusions across {data.cell_locations.Count} cells.");
+    }
+
+    private static void EnsureSolidOcclusionCollider(GameObject occlusion)
+    {
+        // The prefab is made from six thin wall colliders and has a hollow center.
+        // A matching solid hull closes the seams and prevents any transient penetration from trapping the player.
+        MeshCollider solidCollider = occlusion.GetComponent<MeshCollider>();
+        if (solidCollider == null)
+            solidCollider = occlusion.AddComponent<MeshCollider>();
+
+        solidCollider.convex = true;
+        solidCollider.sharedMesh = GetOcclusionCollisionMesh();
+
+        // Avoid overlapping contacts from the original six wall colliders. The new
+        // convex hull supplies the same side boundaries plus a closed interior.
+        foreach (BoxCollider wallCollider in occlusion.GetComponentsInChildren<BoxCollider>())
+            wallCollider.enabled = false;
+    }
+
+    private static Mesh GetOcclusionCollisionMesh()
+    {
+        if (occlusionCollisionMesh != null)
+            return occlusionCollisionMesh;
+
+        float halfHeight = 0.5f;
+        float halfHexHeight = Mathf.Sqrt(3f) / 4f;
+        Vector3[] vertices =
+        {
+            new Vector3( 0.50f, -halfHeight,  0f),
+            new Vector3( 0.25f, -halfHeight,  halfHexHeight),
+            new Vector3(-0.25f, -halfHeight,  halfHexHeight),
+            new Vector3(-0.50f, -halfHeight,  0f),
+            new Vector3(-0.25f, -halfHeight, -halfHexHeight),
+            new Vector3( 0.25f, -halfHeight, -halfHexHeight),
+            new Vector3( 0.50f,  halfHeight,  0f),
+            new Vector3( 0.25f,  halfHeight,  halfHexHeight),
+            new Vector3(-0.25f,  halfHeight,  halfHexHeight),
+            new Vector3(-0.50f,  halfHeight,  0f),
+            new Vector3(-0.25f,  halfHeight, -halfHexHeight),
+            new Vector3( 0.25f,  halfHeight, -halfHexHeight)
+        };
+
+        List<int> triangles = new List<int>
+        {
+            0, 2, 1, 0, 3, 2, 0, 4, 3, 0, 5, 4,
+            6, 7, 8, 6, 8, 9, 6, 9, 10, 6, 10, 11
+        };
+
+        for (int i = 0; i < 6; i++)
+        {
+            int next = (i + 1) % 6;
+            triangles.Add(i);
+            triangles.Add(next);
+            triangles.Add(i + 6);
+            triangles.Add(next);
+            triangles.Add(next + 6);
+            triangles.Add(i + 6);
+        }
+
+        occlusionCollisionMesh = new Mesh
+        {
+            name = "Runtime Hexagonal Occlusion Collider",
+            vertices = vertices,
+            triangles = triangles.ToArray()
+        };
+        occlusionCollisionMesh.RecalculateNormals();
+        occlusionCollisionMesh.RecalculateBounds();
+        return occlusionCollisionMesh;
     }
 
     private void LogDetail(string message)
